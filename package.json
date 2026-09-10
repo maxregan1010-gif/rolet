@@ -1,16 +1,13 @@
 {
   "name": "rolet",
   "version": "1.0.0",
-  "description": "Online multiplayer roulette game",
+  "description": "Online multiplayer 3D roulette game",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "engines": {
-    "node": ">=20 <25"
-  },
   "dependencies": {
-    "express": "^5.1.0",
-    "ws": "^8.18.3"
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
   }
 }
