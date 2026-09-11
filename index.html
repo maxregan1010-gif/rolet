@@ -518,50 +518,103 @@ function shotEffect(targetId,isBullet){
   const target=meshes.get(targetId);
   if(!target || !gun) return;
 
-  const start=gun.getAbsolutePosition().add(new BABYLON.Vector3(2.7,0,0));
-  const end=target.getAbsolutePosition().add(new BABYLON.Vector3(0,1.55,0));
-  const color=isBullet
-    ?new BABYLON.Color3(1,.1,.18)
-    :new BABYLON.Color3(.2,1,.45);
+  // نشانه‌گیری تفنگ به سمت بازیکن هدف، قبل از ظاهر شدن تیر
+  const targetPos=target.getAbsolutePosition().clone();
+  const gunPos=gun.getAbsolutePosition().clone();
+  const dx=targetPos.x-gunPos.x;
+  const dz=targetPos.z-gunPos.z;
+  const desiredRotation=Math.atan2(dx,dz)+Math.PI;
 
-  const line=BABYLON.MeshBuilder.CreateLines(
-    "shotLine",{points:[start,end]},scene
-  );
-  line.color=color;
+  // چرخش نرم و قابل مشاهده‌ی تفنگ
+  const from=gun.rotation.y;
+  let delta=desiredRotation-from;
+  while(delta>Math.PI) delta-=Math.PI*2;
+  while(delta<-Math.PI) delta+=Math.PI*2;
 
-  const flash=BABYLON.MeshBuilder.CreateSphere(
-    "flash",{diameter:.28,segments:14},scene
-  );
-  flash.position.copyFrom(start);
-  const fm=new BABYLON.StandardMaterial("flashMat",scene);
-  fm.emissiveColor=color;
-  fm.disableLighting=true;
-  flash.material=fm;
+  const aimStart=performance.now();
+  const aimDuration=650;
 
-  const light=new BABYLON.PointLight("shotLight",start,scene);
-  light.diffuse=color;
-  light.intensity=14;
-  light.range=5;
+  function aim(now){
+    const q=Math.min(1,(now-aimStart)/aimDuration);
+    const smooth=q*q*(3-2*q);
+    gun.rotation.y=from+delta*smooth;
 
-  const startTime=performance.now();
-  function fx(now){
-    const q=Math.min(1,(now-startTime)/550);
-    line.visibility=1-q;
-    flash.scaling.setAll(1+Math.sin(q*Math.PI));
-    light.intensity=14*(1-q);
-    if(q<1) requestAnimationFrame(fx);
-    else{
-      line.dispose();
-      flash.dispose();
-      light.dispose();
+    if(q<1){
+      requestAnimationFrame(aim);
+      return;
+    }
+
+    fireEffect();
+  }
+
+  function fireEffect(){
+    const start=gun.getAbsolutePosition().add(
+      new BABYLON.Vector3(
+        Math.cos(gun.rotation.y)*2.7,
+        0,
+        Math.sin(gun.rotation.y)*2.7
+      )
+    );
+    const end=target.getAbsolutePosition().add(new BABYLON.Vector3(0,1.55,0));
+
+    const color=isBullet
+      ?new BABYLON.Color3(1,.1,.18)
+      :new BABYLON.Color3(.2,1,.45);
+
+    const line=BABYLON.MeshBuilder.CreateLines(
+      "shotLine",{points:[start,end]},scene
+    );
+    line.color=color;
+    line.visibility=0;
+
+    const flash=BABYLON.MeshBuilder.CreateSphere(
+      "flash",{diameter:.28,segments:14},scene
+    );
+    flash.position.copyFrom(start);
+    flash.scaling.setAll(.15);
+
+    const fm=new BABYLON.StandardMaterial("flashMat",scene);
+    fm.emissiveColor=color;
+    fm.disableLighting=true;
+    flash.material=fm;
+
+    const light=new BABYLON.PointLight("shotLight",start,scene);
+    light.diffuse=color;
+    light.intensity=0;
+    light.range=5;
+
+    // لیزر و نور حدود ۱.۴ ثانیه آرام ظاهر و محو می‌شوند
+    const fireStart=performance.now();
+    const fireDuration=1400;
+
+    function fx(now){
+      const q=Math.min(1,(now-fireStart)/fireDuration);
+      const fade=q<.18 ? q/.18 : 1-(q-.18)/.82;
+      const pulse=.65+.35*Math.sin(q*Math.PI);
+
+      line.visibility=Math.max(.08,fade);
+      flash.scaling.setAll(.15+1.15*pulse);
+      flash.visibility=fade;
+      light.intensity=14*fade;
+
+      if(q<1){
+        requestAnimationFrame(fx);
+      }else{
+        line.dispose();
+        flash.dispose();
+        light.dispose();
+      }
+    }
+
+    requestAnimationFrame(fx);
+
+    if(isBullet){
+      target.scaling.set(1.12,.88,1.12);
+      setTimeout(()=>target.scaling.set(1,1,1),450);
     }
   }
-  requestAnimationFrame(fx);
 
-  if(isBullet){
-    target.scaling.set(1.12,.88,1.12);
-    setTimeout(()=>target.scaling.set(1,1,1),180);
-  }
+  requestAnimationFrame(aim);
 }
 
 function reloadEffect(){
