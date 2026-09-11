@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>RoLeT|701</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"
+  }
+}
+</script>
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050609;color:#fff;font-family:Tahoma,Arial,sans-serif}
 .screen{position:fixed;inset:0;display:none}.screen.active{display:flex}
@@ -11,7 +18,7 @@
 .panel,.lobbyPanel{background:#090d14eb;border:1px solid #ffffff18;border-radius:24px;box-shadow:0 25px 80px #000;backdrop-filter:blur(14px)}
 .panel{width:min(92vw,430px);padding:28px;text-align:center}.logo{font-size:54px;font-weight:900;letter-spacing:8px;text-shadow:0 0 24px #f33}.sub{color:#aab2bf;margin:8px 0 25px}
 .input{width:100%;padding:14px 16px;margin-bottom:12px;border-radius:14px;border:1px solid #29313e;background:#0b1018;color:#fff;outline:0}
-.btn{width:100%;padding:14px;border:0;border-radius:14px;margin-top:9px;color:#fff;font-weight:800}.primary{background:linear-gradient(135deg,#13d477,#08a95d)}.secondary{background:linear-gradient(135deg,#347cff,#2053c7)}.dark{background:#171e29;border:1px solid #ffffff18}.hidden{display:none!important}
+.btn{width:100%;padding:14px;border:0;border-radius:14px;margin-top:9px;color:#fff;font-weight:800;cursor:pointer;touch-action:manipulation;user-select:none;-webkit-tap-highlight-color:transparent;transition:transform .12s,filter .12s,box-shadow .12s}.btn:hover{filter:brightness(1.12);box-shadow:0 8px 24px #0008}.btn:active{transform:scale(.98)}.primary{background:linear-gradient(135deg,#13d477,#08a95d)}.secondary{background:linear-gradient(135deg,#347cff,#2053c7)}.dark{background:#171e29;border:1px solid #ffffff18}.hidden{display:none!important}
 #lobby{align-items:center;justify-content:center;background:radial-gradient(circle,#121823,#050609 65%)}.lobbyPanel{width:min(94vw,650px);padding:24px}.roomTop{display:flex;justify-content:space-between;align-items:center;gap:12px}.roomCode{font-size:28px;font-weight:900;letter-spacing:4px;color:#ffd65a}.copy{width:auto;padding:9px 13px;margin:0}
 .players{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin:20px 0}.playerRow{display:flex;align-items:center;gap:10px;padding:12px;border-radius:14px;background:#0e141d;border:1px solid #ffffff12}.cubeIcon{width:27px;height:27px;border-radius:6px;background:var(--c,#fff)}.host{margin-right:auto;color:#ffd65a;font-size:12px}
 #game{background:#000}#three{position:absolute;inset:0}#hud{position:absolute;inset:0;pointer-events:none}.topHud{position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between}.hudBox{background:#05080dc2;border:1px solid #ffffff18;border-radius:14px;padding:10px 14px;backdrop-filter:blur(10px)}.bullets{font-size:20px;font-weight:900}.bullets small{font-size:11px;color:#aab2bf;font-weight:500}#roomBadge{position:absolute;top:67px;right:12px}
@@ -44,7 +51,7 @@
 <div id="message" class="hidden"><div class="messageCard"><h1 id="messageTitle">🏆 برنده</h1><p id="messageText"></p></div></div><div id="toast"></div>
 
 <script type="module">
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
+import * as THREE from "three";
 import {OrbitControls} from "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/controls/OrbitControls.js";
 const $=id=>document.getElementById(id), menu=$("menu"),lobby=$("lobby"),game=$("game");
 let ws=null,myId=null,roomCode=null,roomState=null,scene,camera,renderer,controls,raycaster,arena,gun,shotBusy=false;
@@ -52,8 +59,20 @@ const meshes=new Map(), colors=[0xffffff,0xffc24b,0x45a3ff,0x39dc79,0xff63c8,0xb
 function screen(s){[menu,lobby,game].forEach(x=>x.classList.remove("active"));s.classList.add("active")}
 function toast(t){const x=$("toast");x.textContent=t;x.classList.add("show");clearTimeout(x.t);x.t=setTimeout(()=>x.classList.remove("show"),2200)}
 function send(d){if(!ws||ws.readyState!==WebSocket.OPEN){toast("اتصال به سرور برقرار نیست.");return false}ws.send(JSON.stringify(d));return true}
-function connect(){if(ws&&(ws.readyState===1||ws.readyState===0))return;ws=new WebSocket((location.protocol==="https:"?"wss":"ws")+"://"+location.host);ws.onclose=()=>toast("اتصال به سرور قطع شد.");ws.onerror=()=>toast("خطا در اتصال به سرور.");ws.onmessage=e=>{try{handle(JSON.parse(e.data))}catch{toast("پاسخ نامعتبر از سرور.")}}}
-function connectThen(d){connect();const f=()=>send(d)||setTimeout(f,120);f()}
+function connect(){
+  if(ws&&(ws.readyState===WebSocket.OPEN||ws.readyState===WebSocket.CONNECTING))return ws;
+  ws=new WebSocket((location.protocol==="https:"?"wss":"ws")+"://"+location.host);
+  ws.onopen=()=>{if(ws._pending){const p=ws._pending;ws._pending=null;send(p)}};
+  ws.onclose=()=>toast("اتصال به سرور قطع شد.");
+  ws.onerror=()=>toast("خطا در اتصال به سرور.");
+  ws.onmessage=e=>{try{handle(JSON.parse(e.data))}catch{toast("پاسخ نامعتبر از سرور.")}};
+  return ws;
+}
+function connectThen(d){
+  const socket=connect();
+  if(socket.readyState===WebSocket.OPEN)send(d);
+  else socket._pending=d;
+}
 $("createBtn").onclick=()=>{let n=$("nameInput").value.trim();if(!n)return toast("نامت را وارد کن.");connectThen({type:"createRoom",name:n.slice(0,20)})};
 $("showJoinBtn").onclick=()=>$("joinBox").classList.toggle("hidden");
 $("joinBtn").onclick=()=>{let n=$("nameInput").value.trim(),c=$("codeInput").value.trim().toUpperCase();if(!n)return toast("نامت را وارد کن.");if(c.length!==6)return toast("کد اتاق باید ۶ کاراکتر باشد.");connectThen({type:"joinRoom",name:n.slice(0,20),code:c})};
